@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <!-- CSS Sheets -->
+    <link rel="stylesheet" href="css/index.css">    
+        
+    <script src ="scripts/d3.js"></script>
+</head>
+<body>
+    <div id="dots">
+        <svg width="512" height="512">
+            <circle cx="256" cy="256" r="100" fill="#918585" fill-opacity="1" />
+        </svg>
+    </div>
+        
+    <script type="text/javascript">
+            
+    /*var sampleSVG = d3.select("#viz")
+        .append("svg")
+        .attr("width", 100)
+        .attr("height", 100);    
+*/
+            
+        d3.selectAll("svg").selectAll("circle")
+        .attr("r", 40)
+        .attr("cx", 50)
+        .attr("cy", 50)
+        .on("mouseover", function(){alert("aaa");d3.select(this).style("fill", "aliceblue");})
+        .on("mouseout", function(){d3.select(this).style("fill", "white");})
+        .transition().duration(750)
+        .attr("r", 256);
+    
+    </script>
+</body>
+</html>

@@ -1,0 +1,77 @@
+/* 
+    Document   : index
+    Created on : Nov 6, 2013, 10:55:45 PM
+    Author     : ZHOU
+    Description:
+        Purpose of the stylesheet follows.
+*/
+
+
+html, body {
+    -moz-user-select: none;
+    cursor: default;
+    font-family: "Helvetica Neue",Helvetica,Arial,Sans-serif;
+    font-size: 14px;
+    font-weight: 300;
+    height: 100%;
+    margin: 0;
+    text-align: center;
+    width: 100%;
+}
+div {
+    cursor: inherit;
+}
+a {
+    color: #4682B4;
+    text-decoration: none;
+}
+a:hover {
+    text-decoration: underline;
+}
+#center {
+    height: 100%;
+    margin: 0 auto;
+    position: relative;
+    width: 512px;
+}
+#cont {
+    height: 570px;
+    margin-top: -270px;
+    position: absolute;
+    top: 50%;
+    width: 512px;
+}
+#dots {
+    margin: auto;
+    text-align: center;
+}
+svg, circle {
+    /*pointer-events: none;*/
+}
+#next {
+    padding-top: 30px;
+}
+#next input {
+    border: 1px solid #CCCCCC;
+    outline: medium none;
+    width: 480px;
+}
+#next .err {
+    color: #FF0000;
+}
+#footer {
+    background: -moz-linear-gradient(center bottom , #FFFFFF, rgba(255, 255, 255, 0)) repeat scroll 0 0 rgba(0, 0, 0, 0);
+    bottom: 0;
+    left: 0;
+    padding-bottom: 2px;
+    padding-top: 18px;
+    position: fixed;
+    right: 0;
+}
+
+.upper {
+    background-color: #1C0D01;
+    color: #FFFFFF;
+    border-color: white;
+    border: double;
+}

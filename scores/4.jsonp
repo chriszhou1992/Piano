@@ -1,0 +1,16 @@
+score = {
+	"title":"Castle in the Sky",
+	"scores":[
+	"M -N -(HOJ) ----N -O --Q --(GNI) ------J --(FMH) ----L -M --O --(ELG) ------K -J -(DKF) ---",
+	"J K--O--(CJE)------O O O (GNI)----4 4--N--(GNI)------M N (HOJ)----N O--Q (GNI)",
+	"------J----(FMH)----L M--O--(ELG)------K J (DKF)----O N----O (EPG)----Q O",
+	"------(HOJ) N M--N--5--(HJM)------O P (JQL)----P Q--S--(GPI)------L--(HOJ)--",
+	"N O--Q--(GQI)--------(FMH) N O--N O P--(HOJ)----L L----(DRF)--Q--P--O--",
+	"(EQG)------Q--(FTH)----S----(JQL)--P O------(IPK)--O P----S--(JQL)--------",
+	"Q--(FTH)----S----(JQL)--P O----(IPK)----O P--N--(HMJ)--M N (HOJ)",
+	"----N O--Q--(GNI)------J--(FMH)--L M--O--(ELG)--------K J (DKF)----J K",
+	"--O--(CJE)------O O O (GNI)----4 4--N (GNI)------M N (HOJ)----N O--Q--(GNI)",
+	"------J J (EMH)----L M--O--(ELG)------J--(FKH)----O N----O (IPK)----Q O",
+	"----(HOJ) N M--N--5--(MHJ)"
+	]
+};

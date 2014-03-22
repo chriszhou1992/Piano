@@ -1,0 +1,23 @@
+score1 = {
+	"title": "Canon",
+	"scores":[
+	"H-JLO E-ILN F-HJM C-GIL",
+	"D-FHK A-EHJ D-FHK E-GIL",
+	"(HQ)-JLO (EP)-GIL (OF)-HJM (NC)-GJL",
+	"(MD)-FHK (LA)-CEH (MD)-FHK (NE)-GIL",
+	"ONOH (GB)LIJ (CH)ONM (CN)QST",
+	"(DR)QPR (QA)PON (DM)LKJ (EI)KJI",
+	"(EH)IJK (EG)ILK (FJ)MLK (CL)KJI",
+	"(DH)FMN (AO)NML (DK)JIM LML",
+	"(SJ)QRS-QR(SE)LMNOPQR",
+	"(FQ)OPQ-JK(GL)MLKLJKL",
+	"(FK)MLK-JI(JE)IHIJKLM",
+	"(FK)MLM-NO(GL)MNOPQRS",
+	"(SI)QRS-QR(SE)LMNOPQR",
+	"(FQ)OPQ-JK(GL)MLKLJKL",
+	"(FK)MLK-JI(EJ)IHIJKLM",
+	"(FK)MLM-NO(GL)MNOPQRS",
+	"(HQ)-JLO (EP)-GIL (OF)-HJM (NC)-GJL",
+	"(MD)-FHK (LA)-CEH (MD)-FHK (NE)"
+	]
+};

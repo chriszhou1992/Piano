@@ -1,0 +1,1378 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Piano</title>
+        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+        
+        <!-- CSS Sheets -->
+        <link rel="stylesheet" href="css/index.css">
+        
+        <!-- Scripts -->
+        <script src ="scripts/vendors/d3.min.js"></script>
+        <script src ="scripts/vendors/soundmanager2.min.js"></script>
+        <script src ="scripts/vendors/jquery.min.js"></script>
+        <script src ="scripts/vendors/jquery.lettering.min.js"></script>
+		<script src ="scripts/JSMIDIparser.js"></script>
+        <!--<script src ="scripts/jquery.svg.min.js"></script>-->
+        
+        <script>
+            var noteKeys = 88.;  //keys for the piano (middle C at index 39)
+            
+            noteSounds = new Array(),   /*array that keeps track the set of all sounds*/
+                whiteKeys = new Array(),    /*array that keeps track of all available white keys*/
+                blackKeys = new Array();    /*array the keeps track of all available black keys*/
+
+            var KEYCOUNT = 44,
+            //dictionary that helps to lookup (char=>charcode) pairs
+                CHARCODE = [],
+            //dictionary that helps to lookup (charcode=>char) pairs
+                CHARACTER = [];
+            setupCharCodeTable();
+            
+            var diameter = 50.,
+                radius = diameter / 2;
+            //var keysPerRow = Math.ceil(screen.width / (noteKeys * diameter) );
+
+            var highlightTime = 0,
+                keyPressTime = 0;
+            
+            soundManager.setup({
+            
+            // 100% HTML5 mode
+            preferFlash: false,
+			// console output
+			debugMode: true,
+            
+            //create sounds for piano keys
+            onready: function() {
+                for (var i = 0; i < noteKeys; i++)
+                {
+                    noteSounds[i] = soundManager.createSound({
+                            id: i.toString(),
+                            url: "notes/B/" + i + ".mp3",
+							volume: 50
+                    });
+                }
+
+                var setIndex = 0,
+                    blackKeyIndex = 0,
+                    whiteKeyIndex = 0;
+                //3 * 12 + 8 = 44 available notes
+                for (var i = 27; i < 71; i++)   //note for keyboard A starts at index 27
+                {
+                    if (isBlackKey(setIndex))
+                    {
+                        blackKeys[blackKeyIndex] = noteSounds[i];
+                        blackKeyIndex++;
+                    }
+                    else
+                    {
+                        whiteKeys[whiteKeyIndex] = noteSounds[i];
+                        whiteKeyIndex++;
+                    }
+                    setIndex = (setIndex + 1) % 12; //7 white keys + 5 black keys in an octave
+                }
+            }
+        });
+
+
+        /**
+         * Function that determines whether the setIndex (index in the scope of
+         * 12 black/white keys in an octave) represents a black key.
+         * @param {number} setIndex
+         * @returns {boolean} True if the index represents a black key, false otherwise.
+         */
+        function isBlackKey(setIndex)
+        {
+            if (setIndex % 2 === 0)  //even
+                return (setIndex >= 6 && setIndex <= 10)    //True for 6, 8, 10
+            else
+                return (setIndex === 1 || setIndex === 3)     //True for 1, 3
+        }
+
+
+        /**
+         * Function that sets up the CHARCODE constant for lookup
+		 * char=>keyDownEventcode pairs and CHARACTER for the reverse lookup.
+         */
+        function setupCharCodeTable()
+        {
+            CHARCODE["A"] = 65;
+            CHARCODE["Z"] = 65 + 25;
+            CHARCODE["["] = 219;
+            CHARCODE["]"] = 221;
+            CHARCODE[";"] = 59;     //Firefox/Opera
+            CHARCODE[";1"] = 186;   //Chrome/Safari/IE
+            CHARCODE["'"] = 222;
+            CHARCODE["`"] = 192;
+            CHARCODE[","] = 188;
+            CHARCODE["."] = 190;
+            CHARCODE["/"] = 191;
+            CHARCODE["1"] = 49;
+            CHARCODE["DEL"] = 46;
+
+            CHARACTER[46] = "DEL";
+            CHARACTER[49] = "1";
+            CHARACTER[191] = "/";
+            CHARACTER[190] = ".";
+            CHARACTER[188] = ",";
+            CHARACTER[192] = "`";
+            CHARACTER[222] = "'";
+            CHARACTER[186] = ";";
+            CHARACTER[59] = ";";
+            CHARACTER[221] = "]";
+            CHARACTER[219] = "[";
+            
+        }
+        </script>
+    </head>
+    <body>
+        <script>
+            var scoreNumber = 0,
+                totalScores = 2;
+
+			var unmappedNotes = [],
+				playedUnmappedNotes = 0;
+            
+            d3.select("body")
+            .on("keydown", handleKeys);
+
+            //var playedNotesColor = randomColor();
+            var playedNotesColor = "black",
+                currentNoteCount = 1,
+				maxNoteCount = 1,
+                highlighted = true;    //flag indicating whether a character has been highlighted
+
+            var initialized = false,
+                targetNotes = new Array(), //used to keep track of the target multiple notes
+                attemptedNotes = new Array(); //used to keep track of attempted notes
+
+            var interval = 0,   //global variable used for setInterval()
+                tempo = 150,    //500 miliseconds a note
+                autoPlayFlag = false;   //flag enabling/disabling autoplaying
+
+            /**
+             * Function that handles key presses.
+             * Will echo piano sound and trigger animation if [A-Z] is pressed.
+             */
+            //pressing A-Z will play notes
+            function handleKeys()
+            {
+                /*setInterval(function()
+                {
+                    var char = d3.select("#scorecontent")
+                        .select(".char" + currentNoteCount);
+
+                    checkCorrectKeyPress(char, 0);
+                    highlightScore(new Array(), -1);
+                }, tempo);*/
+
+                keyPressTime = Date.now();
+                   
+                var key = d3.event.keyCode,
+                    blackKeyIndex = mapCharToBlackKey(key);
+
+                //console.log("blackkeyindex:" + blackKeyIndex);
+
+                var char = d3.select("#scorecontent")
+                        .select(".char" + currentNoteCount);
+
+                //play notes
+                d3.event.preventDefault();
+                playNote(char, key);
+
+                //heroku
+                /**********special keys**********/
+                if (key === CHARCODE["DEL"])  //DELETE then reset score
+                {
+                    resetKeys(char);
+                /*
+                    d3.event.preventDefault();
+                    scoreNumber = (scoreNumber + 1) % totalScores;
+                    $( "#score" ).load( "index.html #score", function( html ) {});*/
+                }
+            }
+
+            /**
+             * Function that handles resetting the highlighting on the score
+			 * and logics back to the starting state.
+			 * @param {Object} char An Object constructed from D3 select() operation
+             *		that represents the current highlighted span block
+			 *		containing a letter on the music score.
+             */
+			function resetKeys(char)
+			{
+				if (char.html() === "(") //multiple note press
+				{
+					char = d3.select("#scorecontent")
+							.select(".char" + (currentNoteCount + 1));
+					do
+					{
+						checkCorrectKeyPress(char, char.html().charCodeAt(0));
+						char = d3.select("#scorecontent")
+							.select(".char" + (currentNoteCount + 1));
+					}
+					while(char.html() !== ")");
+				}
+				else
+					checkCorrectKeyPress(char, char.html().charCodeAt(0));
+
+				currentNoteCount = 1;
+				playedUnmappedNotes = 0;
+
+				char = d3.select("#scorecontent")
+					.select(".char1");
+				char.transition().duration(500)
+					.style("background", "yellow")
+					.style("color", "black");
+			}
+
+
+			
+            /**
+            * Function that maps a charCode to the corresponding black key index.
+             * @param {number} charCode The code of the character pressed.
+             * @returns {number} The index of the mapped black key in blackKeys
+             * array or -1 if the index doesn't exist.
+             */
+            function mapCharToBlackKey(charCode)
+            {
+                switch (charCode)
+                {
+                    case CHARCODE["["]:
+                        return 0;
+                    case CHARCODE["]"]:
+                        return 1;
+                    case CHARCODE["`"]:
+                        return 2;
+                    case CHARCODE[";"]:     //Firefox/Opera
+                    case CHARCODE[";1"]:    //Chrome/Safari/IE
+                        return 3;
+                    //numbers 1 - 9
+                    case CHARCODE["1"]:
+                    case CHARCODE["1"] + 1: //2
+                    case CHARCODE["1"] + 2: //3
+                    case CHARCODE["1"] + 3: //4
+                    case CHARCODE["1"] + 4: //5
+                    case CHARCODE["1"] + 5: //6
+                    case CHARCODE["1"] + 6: //7
+                    case CHARCODE["1"] + 7: //8
+                    case CHARCODE["1"] + 8: //9
+                        return charCode - CHARCODE["1"] + 4;
+                    //number 0 goes after 9
+                    case CHARCODE["1"] - 1: //0
+                        return 13;
+                    case CHARCODE["'"]:
+                        return 14;
+                    case CHARCODE[","]:
+                        return 15;
+                    case CHARCODE["."]:
+                        return 16;
+                    case CHARCODE["/"]:
+                        return 17;
+                    default:
+                        return -1;
+                }
+            }
+
+            /**
+             * Function that checks if the key pressed matches the correct key
+             * on the score, and revert the highlight animation if it is correct.
+             * @param {Object} char An Object constructed from D3 select() operation
+             * that represents the span block of a letter on the music score.
+             * @param {number} key The keycode of the keydown event.
+             */
+            function checkCorrectKeyPress(char, key)
+            {   
+                //console.log(char.html());
+                if (!highlighted)
+                    return;
+                
+				/***** pause characters *****/
+                if (char.html() === " " || char.html() === "-" || char.html() === "\n")
+                {
+                    animateRevertHighlight(char, tempo);
+                    currentNoteCount++;
+                }
+				/***** no autoplay flag and triggered from clock ticks *****/
+				else if (!autoPlayFlag && key === 0)
+				{
+					return;
+				}
+                else if (char.html() === String.fromCharCode(key))
+                {
+                    //hit correct key then change back style
+                    animateRevertHighlight(char, tempo);
+                    
+                    //and advance to next key
+                    currentNoteCount += 1;
+                }
+                else if (char.html() === "(")   //special handling for multiple notes
+                {
+                    attemptedNotes.push(String.fromCharCode(key));
+                    var satisfied = true;
+                    for (note in targetNotes)
+                    {
+                        if (attemptedNotes.indexOf(targetNotes[note]) === -1)
+                        {
+                            satisfied = false;
+                            break;
+                        }
+                    }
+
+                    if (satisfied || autoPlayFlag)
+                    {
+                        //reset
+                        targetNotes = [];
+                        attemptedNotes = [];
+                        initialized = false;
+
+						var scorecontent = d3.select("#scorecontent");
+
+                        //animate highlight movement
+                        var chordCount = currentNoteCount + 1;
+                        char = scorecontent.select(".char" + chordCount);
+                        do
+                        {
+                            //console.log("currentmultkey: ", char.html());
+                            //console.log("notecount before: ", chordCount);
+
+                            if (autoPlayFlag)
+                            {
+                                autoPlayFlag = false;
+                                //console.log("autoplay" + char.html());
+								//console.log("ASCII = " + isASCII(char.html()));
+                                if (isASCII(char.html()))
+                                    playNote(char, char.html().charCodeAt(0));
+                                else
+                                    playNote(char, CHARCODE[char.html()]);
+                                //currentNoteCount--;
+                                //console.log("notecount after autoplay: ", chordCount);
+                                autoPlayFlag = true;
+                            }
+
+                            //change back style
+                            animateRevertHighlight(char, tempo);
+                            chordCount++;
+                            char = scorecontent.select(".char" + chordCount);
+                        }
+                        while (char.html() !== ")");
+
+						//correct the highlighting of first chord key
+						char = scorecontent.select(".char" + currentNoteCount);
+						animateRevertHighlight(char, tempo);
+						
+                        currentNoteCount = chordCount + 1; //skip ")" and highlight next character
+                    }//endif
+                }
+                else if (autoPlayFlag)    //check for autoplay
+                {
+					autoPlayFlag = false;
+					//assuming keycode needs explicit map (different from ASCII code)
+					var key = CHARCODE[char.html()];
+
+					//check whether assumption is correct (is ASCII code same as keycode)
+					if (isASCII(char.html()))
+						key = char.html().charCodeAt(0);
+					else if (char.html() === "*")	//unmapped note
+						key = -2;
+					
+                    playNote(char, key);
+					autoPlayFlag = true;
+                }
+				/*********black keys********/
+				else if (char.html() === CHARACTER[key] || "0123456789".indexOf(char.html()) !== -1)
+                {
+                    //hit correct key then change back style
+                    animateRevertHighlight(char, tempo);
+
+                    //and advance to next key
+                    currentNoteCount += 1;
+                }
+				/***** unmapped characters *****/
+				else if (char.html() === "*")
+				{
+					animateRevertHighlight(char, tempo);
+					//and advance to next key
+                    currentNoteCount += 1;
+				}
+            }
+
+
+            /**
+             * Function that determines whether the keydown event
+             * keycode of a keyboard key is the same as its ASCII code.
+             * @param {string} c The charcter that is pressed
+             * @returns {boolean} True if the keycode of c is the same as
+             * its ASCII, False otherwise.
+             */
+            function isASCII(c)
+            {
+                var code = c.charCodeAt(0);
+                return (code >= CHARCODE["A"] && code <= CHARCODE["Z"])
+                    || ((code >= (CHARCODE["1"] - 1) && code <= (CHARCODE["1"] + 8)));
+            }
+
+            /**
+             * Function that mesures how on rhythm is a keypress and outputs
+             * corresponding images (cool/good/bad/miss).
+             * @param {number} timeDifference The difference between
+             *      keypresstime and the highlighttime of the character.
+             */
+            function evaluateCorrectness(timeDifference)
+            {
+                //console.log("timeDifference:" + timeDifference);
+
+                var img = d3.select("#onrhythm").select("svg")
+                    .select("image");
+
+                if (timeDifference === -1)  //don't change image
+                    return;
+                else if (timeDifference <= 250)
+                    img.attr("xlink:href", "images/cool.png");
+                else if (timeDifference <= 500)
+                    img.attr("xlink:href", "images/good.png");
+                else if (timeDifference <= 750)
+                    img.attr("xlink:href", "images/bad.png");
+                else
+                    img.attr("xlink:href", "images/miss.png");
+            }
+			
+            /**
+             * Function that handles playing and animating the corresponding
+             * note key given the keycode from the keyDown event.
+			 * @param {Object} char An Object constructed from D3 select() operation
+             *		that represents the span block of a letter on the music score.
+             * @param {number} key The keycode from the keyDown event.
+             */
+            function playNote(char, key)
+            {
+                var highlightNotes = new Array(),
+                    blackKeyIndex = mapCharToBlackKey(key);
+
+				//console.log("blackkeyIndex = " + blackKeyIndex);
+
+				/*********unmapped keys**********/
+				if (char.html() === "*")
+				{
+					var soundIndex = unmappedNotes[playedUnmappedNotes];
+					//console.log("* sound id: " + soundIndex);
+
+					//valid key on Piano
+					if (soundIndex > 0 && soundIndex < 88)
+					{
+						//console.log("going to play * id: " + soundIndex);
+						noteSounds[ soundIndex ].play();
+						playedUnmappedNotes++;
+					}
+
+					checkCorrectKeyPress(char, -2); //always revert back highlight for unmapped notes
+                    highlightScore(highlightNotes, -2); //update highlight
+				}
+                /******white keys******/
+                else if (key >= CHARCODE["A"] && key <= CHARCODE["Z"])
+                {
+					//console.log("going to play white key: " + (key - CHARCODE["A"]));
+                    whiteKeys[key - CHARCODE["A"]].play();
+                    animateNote(key - CHARCODE["A"], 0);
+
+                    checkCorrectKeyPress(char, key); //if correct then revert back highlight
+
+                    highlightScore(highlightNotes, key); //update highlight
+                }
+                /**********black keys***********/
+                else if (blackKeyIndex !== -1)
+                {
+					//console.log("played blackKeyIndex = " + blackKeyIndex);
+                    blackKeys[blackKeyIndex].play();
+                    animateNote(blackKeyIndex, 1);
+
+                    checkCorrectKeyPress(char, CHARCODE[char.html()]); //if correct then revert back highlight
+
+                    highlightScore(highlightNotes, CHARCODE[char.html()]); //update highlight
+                }
+            }
+
+            
+            /**
+             * Function that handles the animation of undoing highlight
+             * back to its original color.
+             * @param {object} char The object that represents the character
+             *      produced from d3.select
+             * @param {number} duration The duration of the animation
+             */
+            function animateRevertHighlight(char, duration)
+            {
+                //first key press should be always cool
+                if (highlightTime === 0)
+                    evaluateCorrectness(0);
+
+                if (keyPressTime !== 0)     //if came from a actual keypress
+                    evaluateCorrectness(keyPressTime - highlightTime);
+                else
+                    evaluateCorrectness(-1);
+
+                //console.log("reverted highlight of " + char.html());
+
+                //reset flags
+                keyPressTime = 0;
+                highlighted = false;
+
+                char.transition().duration(duration)
+                    .style("background-color", playedNotesColor)
+                    .style("color", "white");
+            }
+
+            /**
+            * Function that handles the logic of determining which keys to highlight next.
+            * @param {array} highlightNotes An array that contains the keys to be highlighted.
+            * @param {number} key The keycode of the keydown event.
+            */
+            function highlightScore(highlightNotes, key)
+            {
+                var char = d3.select("#scorecontent").select(".char" + currentNoteCount);
+
+                if (highlighted)
+                {
+                    //clearInterval(interval);
+                    return;
+                }
+
+                //console.log("char: " + char.html());
+                //console.log("highlighted: " + highlighted);
+                
+                /*if the function is triggered from a valid key press
+                 * then some character will get highlighted*/
+                if (key !== -1)
+                    highlighted = true;
+                
+                if (char.html() === "(")   //multiple characters
+                {
+					//console.log("multikey highlight!");
+					
+                    //if player failed multi-key then should still highlight the entire block
+                    var leftBracket = currentNoteCount;
+
+                    currentNoteCount++;
+                    char = d3.select("#scorecontent").select(".char" + currentNoteCount);
+                    do
+                    {
+                        if (!initialized)   //initialize target notes for multi-key presses
+                            targetNotes.push(char.html());
+
+                        highlightNotes.push(char);
+                        currentNoteCount++;
+                        char = d3.select("#scorecontent").select(".char" + currentNoteCount);
+                    }
+                    while (char.html() !== ")");
+
+                    currentNoteCount = leftBracket;
+                    initialized = true;
+                    highlighted = true;
+                }
+                else if (char.html() >= String.fromCharCode(CHARCODE["A"]) && char.html() <= String.fromCharCode(CHARCODE["Z"]))
+                {
+                    //valid one character
+                    //console.log("pushed character to highlight: " + char.html());
+                    highlightNotes.push(char);
+                    highlighted = true;
+                }
+                else if ("0123456789".indexOf(char.html()) !== -1 || char.html() === CHARACTER[CHARCODE[char.html()]])
+                {
+					//console.log("blackKEY!! pushed character to highlight");
+                    highlightNotes.push(char);
+                    highlighted = true;
+                }
+                else    //other characters
+                {
+                    //currentNoteCount++;
+                    if (!highlighted)
+                    {
+                        highlightNotes.push(char);
+                        highlighted = true;
+                    }
+                    //else
+                      //  highlightScore(highlightNotes);
+                    /*{
+                        currentNoteCount++;
+                        char = d3.select("#scorecontent").select(".char" + currentNoteCount);
+                    }*/
+
+                    ////console.log("OC! pushed char: " + char.html());
+                    //highlightNotes.push(char);
+                }
+
+                /******highlight animation******/
+                while(highlightNotes.length !== 0)
+                {
+                    char = highlightNotes.pop();
+
+					//console.log("highlighted " + char.html());
+					
+                    char.transition().duration(tempo)
+                    .style("background", "yellow")
+                    .style("color", "black");
+
+                    highlightTime = Date.now();
+                }
+            }
+
+            /**
+            * Function that generates a random rgba color.
+             * @returns {string} The string representation in the format of
+             * "rgba(red, green, blue, alpha)"
+             */
+            function randomColor()
+            {
+                return "rgba(" + random(0, 255) + "," + random(0, 255) + "," 
+                        + random(0, 255) + "," + random(0, 100)/100. + ")";
+            }
+            
+            /**
+             * Function that generates a random integer between low and high.
+             * @param {number} low The lower bound
+             * @param {number} high The upper bound
+             * @returns {number} The random number in the range [low, high]
+             */
+            function random(low, high)
+            {
+                return Math.floor((Math.random() * (high - low + 1)) + low); 
+            }
+        </script>
+        
+        <script id="s" src="scores/4.jsonp"></script>
+        <div id="score">
+            <div class="upper">
+                <p id="scoretitle">
+                <p id="scorecontent">
+            </div>
+            <div class="lower"></div>
+        </div>
+        
+        <div id="zero">
+            <svg width="600" height="300">
+                <g>
+                    <circle cx="256" cy="256" r="0" fill="#918585" fill-opacity="1" />
+                </g>
+            </svg>
+        </div>
+        <div id="dots"></div>
+        
+        <script type="text/javascript">
+            //var circles = []
+
+            var blackKeyIndex = 0,
+                whiteKeyIndex = 0;
+            //add circles that represent piano keys
+            for (var i = 0; i < KEYCOUNT; i++)
+            {
+                if (isBlackKey(i % 12))
+                {
+                    addSvgCirclesBlack(i, blackKeyIndex);
+                    blackKeyIndex++;
+                }
+                else
+                {
+                    addSvgCirclesWhite(i, whiteKeyIndex);
+                    whiteKeyIndex++;
+                }
+                //circles.push(i);
+            }
+                
+            
+            /**********intro animation**********/
+            //d3.select("#zero").style("display", "none");
+            var g = d3.select("#zero").select("svg").select("g")
+                .on("click", function(){
+                    autoPlayFlag = !autoPlayFlag;
+                });
+
+            g.append("text")
+                .attr("dy", "1.40em")
+                .attr("text-anchor", "bottom")
+                .text("Play");
+
+            g.select("circle").on("mouseover", function(){d3.select(this)
+                .style("fill", randomColor());})
+                .transition().duration(750)
+                .attr("r", 100)
+                .style("fill", randomColor());
+            
+            g.select("circle").transition()
+                .duration(1000)
+                .style("stroke", randomColor())
+                .style("stroke-width", 3)
+                .attr("r", 50)
+                .attr("cy", 0)
+                //.each("end", function(){d3.select("#zero").style("display", "none");});
+
+
+            /*********circle animation********/
+            d3.select("#dots").selectAll("svg").selectAll("circle")
+                .transition().duration(2000)
+                .attr("r", radius);
+            
+            d3.select("#dots").selectAll("svg").selectAll("g").selectAll("text")
+                .transition()
+                .duration(7500)
+                .attr("x", radius)
+                .attr("y", radius - 15);
+            
+            /**
+             * Function that adds the one white circle svg to the
+             * #dots <div>.
+             * @param {number} id A counter that uniquely identifies the svg.
+             * @param {number} index The index of the associated note sound in whiteKeys array.
+             */
+            function addSvgCirclesWhite(id, index)
+            {
+                /*****append svg*****/
+                var svg = d3.select("#dots").append("svg")
+                .attr("width", diameter)
+                .attr("height", diameter)
+                .attr("id", "whitenote" + index).append("g");
+        
+                /*****append circle to svg*****/
+                svg.append("circle")
+                .data([id])
+                .style("stroke", "gray")
+                .style("fill", "white")
+                .attr("r", 0)
+                .attr("cx", radius)
+                .attr("cy", radius)
+                .on("mouseover", function(){d3.select(this).style("fill", "aliceblue");})
+                .on("mouseout", function(){d3.select(this).style("fill", "white");})
+                .on("click", function(){
+                    animateNote(index, 0);
+                    whiteKeys[index].play();
+                });
+                
+                /*****append text to circle*****/
+                svg.append("text")
+                //.data(id)
+                .attr("dy", "1.40em")
+                .attr("text-anchor", "middle")
+                .text(String.fromCharCode(index + 65))
+                .on("click", function(){
+                    animateNote(index, 0);
+                    whiteKeys[index].play();
+                });
+            }
+
+            
+            /**
+             * Function that adds the one black circle svg to the
+             * #dots <div>.
+             * @param {number} id A counter that uniquely identifies the svg.
+             * @param {number} index The index of the associated note sound in blackKeys array.
+             */
+            function addSvgCirclesBlack(id, index)
+            {
+                /*****append svg*****/
+                var svg = d3.select("#dots").append("svg")
+                .attr("width", diameter)
+                .attr("height", diameter)
+                .attr("id", "blacknote" + index).append("g");
+
+                //define gradient
+                var g = svg.append("def").append("radialGradient")
+                    .attr("id", "g")
+                    .attr("cx", "50%")
+                    .attr("cy", "50%")
+                    .attr("r", "50%")
+                    .attr("fx", "50%")
+                    .attr("fy", "50%");
+
+                g.append("stop")
+                    .attr("offset", "0%")
+                    .style("stop-color", "black")
+                    .style("stop-opacity", "0");
+
+                g.append("stop")
+                    .attr("offset", "100%")
+                    .style("stop-color", "white")
+                    .style("stop-opacity", "1");
+
+
+                /*****append circle to svg*****/
+                svg.append("circle")
+                .data([id])
+                .style("stroke", "gray")
+                .style("fill", "url(#g)")
+                .attr("r", 0)
+                .attr("cx", radius)
+                .attr("cy", radius)
+                .on("mouseover", function(){d3.select(this).style("fill", "aliceblue");})
+                .on("mouseout", function(){d3.select(this).style("fill", "url(#g)");})
+                .on("click", function(){
+                    animateNote(index, 1);
+                    blackKeys[index].play();
+                });
+
+                /*****append text to circle*****
+                svg.append("g").append("text")
+                //.data(id)
+                .attr("dy", "1.40em")
+                .attr("text-anchor", "middle")
+                .text(String.fromCharCode(id + 64))
+                .on("click", function(){
+                    whiteKeys[id].play();
+                });*/
+            }
+
+
+            /**
+             * Function that does the transition when a key corresponding
+             * to music note is pressed.
+             * @param {number} key The id of the SVG containing the note circle.
+             * @param {number} blackKey A number indicating whether the key is black.
+             */
+            function animateNote(key, blackKey)
+            {
+                if (blackKey === 1)
+                    var cir = d3.select("#blacknote" + (key) ).select("circle");
+                else
+                    var cir = d3.select("#whitenote" + (key) ).select("circle");
+                    
+                cir.transition()
+                    .duration(300)
+                    .attr("r", radius/2)
+                    .style("stroke", randomColor())
+                    .style("stroke-opacity", 1)
+                    .style("stroke-width", 1)
+                    .each("end", function(){
+                        cir.transition()
+                        .duration(300)
+                        .attr("r", radius);
+                        //.style("fill", randomColor);
+                    });
+                    
+            }
+            
+            /*get screen height/width (from StackOverflow
+            http://stackoverflow.com/questions/3437786/how-to-get-web-page-size-browser-window-size-screen-size-in-a-cross-browser-wa)
+            var w = window,
+                d = document,
+                e = d.documentElement,
+                g = d.getElementsByTagName('body')[0],
+                x = w.innerWidth || e.clientWidth || g.clientWidth,
+                y = w.innerHeight|| e.clientHeight|| g.clientHeight;
+
+            var scoreSVG = d3.select("#scorecontent").append("svg")
+                .attr("id", "scoreSVG")
+                .attr("width", x)
+                .attr("height","400px");*/
+
+            /*from StackOverflow
+            http://stackoverflow.com/questions/16265123/resize-svg-when-window-is-resized-in-d3-js
+            function updateWindow(){
+                x = w.innerWidth || e.clientWidth || g.clientWidth;
+                y = w.innerHeight|| e.clientHeight|| g.clientHeight;
+
+                scoreSVG.attr("width", x).attr("height", 400);
+            }
+            window.onresize = updateWindow;*/
+
+			/*****fade in score title******/
+			d3.select("#scoretitle").style("opacity", 0);
+
+			d3.select("#scoretitle").html(score.title)
+				.transition()
+				.duration(1000)
+				.style("opacity", 1);
+
+			//prepare music score into a string
+			var out = "";
+            for(var i = 0; i < score.scores.length; i++)
+                out += score.scores[i] + "\n";
+			/*****fade in score******/
+			d3.select("#scorecontent").style("opacity", 0);
+			d3.select("#scorecontent").html(out)
+				.transition()
+				.delay(1000).duration(1000)
+				.style("opacity", 1);
+
+			maxNoteCount = out.length;
+
+			/******lettering******/
+			$("#scorecontent").lettering();
+			//console.log("lettering!");
+
+			/***highlight the first note***/
+			currentNoteCount = 1;
+			d3.select("#scorecontent")
+				.select(".char" + currentNoteCount)
+				.transition().duration(1500)
+				.style("background", "yellow")
+				.style("color", "black");
+            
+            $(document).ready(function() {
+                setInterval(function()
+                {
+					//when reached the end reset everything
+					if (currentNoteCount > maxNoteCount)
+						resetKeys(d3.select("#scorecontent")
+                        .select(".char" + maxNoteCount));
+					
+                    var char = d3.select("#scorecontent")
+                        .select(".char" + currentNoteCount);
+					
+                    checkCorrectKeyPress(char, 0);
+                    highlightScore(new Array(), -1);
+                }, tempo);
+            });
+        </script>
+
+        <div id="play"></div>
+        <div id="onrhythm">
+            <svg width="200px" height ="150px">
+                <image width="128px" height="128px" xlink:href=""></image>
+            </svg>
+        </div>
+		
+        <div>
+            <input id="filereader" type="file">
+			<p id="debug"></p>
+        </div>
+
+		<script>
+			var MICROSECONDS_PER_MINUTE = 60000000.0;
+
+			var midi = {
+				timeDivision: 0,
+				trackNumber: 0,
+				title: "",
+				time: {
+					numerator: 4,
+					denominator: 4,
+					metro: 24,
+					actualPlayedNotesPerNoteTime: 1.,
+					msPerQuarterNote: 500000,
+					msPerTick: 500000 / 480
+				},
+				beatsPerMinute: 120,
+				keySet: [],
+				tracks: [],
+				score: ""
+				//trackNoteCount: 0,
+				//tracksCount: 0,
+				//keySetCount: 0,
+			};
+
+			/**
+			 *
+			 */
+			function convertMIDIToScore()
+			{
+				var indices = [0],
+					noteCount = midi.tracks[0].length,
+					numberOfTracks = midi.tracks.length;
+					
+				for (var i = 1; i < numberOfTracks; i++)
+				{
+					//if (maxLength < midi.tracks[i].length)
+					noteCount += midi.tracks[i].length;
+					indices.push(0);
+				}
+
+				var earliestNote = midi.tracks[0][0];
+				var scoreNotes = [],
+					earliestNoteIndex = 0;
+				//iterate through all notes in score
+				for (var j = 0; j < noteCount; j++)
+				{
+					//TODO: separate tracks
+					for (i = 0; i < numberOfTracks; i++)
+					{
+						//is valid index and the note appears earlier
+						if (indices[i] < midi.tracks[i].length &&
+							midi.tracks[i][indices[i]].time < earliestNote.time)
+						{
+							earliestNote = midi.tracks[i][indices[i]];
+							earliestNoteIndex = i;
+						}
+					}
+					////console.log("%o", earliestNote);
+					
+					//update index of the selected note
+					indices[earliestNoteIndex]++;
+					scoreNotes.push(earliestNote);
+					earliestNote = {time: Infinity};
+				}
+				//console.log("aaa = %o", {a:scoreNotes});
+
+				var beatsPerMicrosecond = midi.beatsPerMinute / MICROSECONDS_PER_MINUTE,
+					//microsecondsPerBeat = Math.pow(beatsPerMicrosecond, -1),
+					microsecondsPerBeat = 1 / beatsPerMicrosecond / 2,
+					globalTime = -1.;
+
+				//console.log("time signature: " + midi.time.numerator + "/" + midi.time.denominator);
+				//console.log("microsecondsPerBeat = " + microsecondsPerBeat);
+				//midi.score = "" + mapNoteToChar(scoreNotes[0].id) + " ";
+
+				midi.score = "";	//reset score
+				var multiKeyChord = false,
+					len = scoreNotes.length - 1;
+				
+				i = 0;
+				var previousI = 0,	//counter used to check if a note is added to the score
+					pause = 0;	//flag for determining wheter a pause mark should be inserted
+				while (i < len)
+				{
+					pause = 0;
+					while (previousI !== i && i < len)
+					{
+						//console.log("prevI = " + previousI + " i = " + i);
+						previousI = i;
+						
+						if (scoreNotes[i].time <= globalTime || globalTime === -1.)
+						{
+							if (globalTime === -1)	//initialize time tracker
+								globalTime = scoreNotes[0].time;
+
+							/***check for multi-note chord***/
+							if (scoreNotes[i].time === scoreNotes[i + 1].time)
+							{
+								if (!multiKeyChord)	//start of multi-note chord
+								{
+									midi.score += "(";
+									multiKeyChord = true;
+								}
+								midi.score += mapNoteToChar(scoreNotes[i].id);
+								/*do not update global time for chord since they
+								should be pressed at the same time*/
+								//globalTime -= microsecondsPerBeat;
+							}
+							else if (multiKeyChord)	//end of multi-note chord
+							{
+								midi.score += mapNoteToChar(scoreNotes[i].id) + ")";
+								multiKeyChord = false;
+							}
+							else	//regular note
+								midi.score += mapNoteToChar(scoreNotes[i].id);
+
+							//add space to separate notes if not a multi-note chord
+							if (!multiKeyChord)
+								midi.score += " ";
+							i++;
+							pause++;
+						}
+					}//while
+					
+					if (pause === 0)
+						midi.score += "-";
+					globalTime += microsecondsPerBeat;
+					previousI--;	//make previousI !== i so we can go into the loop again
+				}
+				//console.log("globalTime = " + globalTime);
+				//handle the last note
+				midi.score += mapNoteToChar(scoreNotes[i].id);
+				if (multiKeyChord)
+					midi.score += ") ";
+				else
+					midi.score += " ";
+
+				/*tempo = microsecondsPerBeat / 1000 * 2;
+				if (tempo < 150)
+					tempo = 150;*/
+			}
+
+			/**
+			 * Function that parses the track0(contains info about songs) for
+			 * type1 MIDI.
+			 * @param {array} track0 An array of events that store all events
+			 *		contained in track0.
+			 */
+			function parseType1Track0(track0)
+			{
+				for (var i = 0, len = track0.length; i < len; i++)
+				{
+					var e = track0[i];
+					if (e.type === 255)	//Meta Event Type
+					{
+						switch(e.metaType)
+						{
+							/***********track name***********/
+							case 3:
+								midi.title = "";	//reset midi title
+								midi.title = e.data;
+								//d3.select("#debug").html(utf8.parse(bytes));
+								break;
+							/***********time signature***********/
+							case 88:
+								midi.time.numerator = e.data[0];
+								/* needs to convert since the stored data
+								 * is a power instead of a result.
+								 */
+								midi.time.denominator = Math.pow(e.data[1], 2);
+								midi.time.metro = e.data[2];
+								/* e.data[3] specifies the actual number of 1/32 notes
+								 * that happens in a 1/4 note time (24 clock ticks)
+								 * , hence dividing by 8 would give us the
+								 * actual number of notes played in a note's time
+								 */
+								midi.time.actualPlayedNotesPerNoteTime = e.data[3] / 8.0;
+								break;
+							/***********tempo***********/
+							case 81:
+								/*
+								 * BPM = MICROSECONDS_PER_MINUTE / MPQN
+								 * MPQN = MICROSECONDS_PER_MINUTE / BPM
+								 */
+								midi.time.msPerQuarterNote = e.data;
+								midi.beatsPerMinute = MICROSECONDS_PER_MINUTE / e.data;
+								break;
+						}
+					}
+				}
+			}
+
+
+			/**
+			 * Function that parses the track1(contains track events) for
+			 * type1 MIDI.
+			 * @param {array} track An array of events that store all events
+			 *		contained in track1.
+			 */
+			function parseType1MusicTrack(track)
+			{
+				var currentTime = 0.;
+				var notes = [];
+				for (var i = 0, len = track.length; i < len; i++)
+				{
+					var e = track[i];
+					currentTime += midi.time.msPerTick * e.deltaTime;
+					switch (e.type)		//Channel Event Type
+					{
+						/*Controller event signals the change in a MIDI channels state*/
+						//case 11: TODO: add controller event change support(pan, volume)
+
+						case 9:		//Note On Event
+							if (e.data[1] !== 0)	//velocity not zero
+								notes.push({
+									/* MIDI have 128 controllers, note number 21
+									 * corresponds to note 0 on 88-key Piano
+									 * only notes 21-108 are supported */
+									id: e.data[0] - 21,
+									velocity: e.data[1],
+									time: currentTime
+								});
+							break;
+						default:
+							break;
+					}
+				}
+				midi.tracks.push(notes);
+			}
+			
+			function handleType1MIDI(obj)
+			{
+				//by convention first track contains song info
+				var track0 = obj.track[0].event;
+				parseType1Track0(track0);
+
+				//if timeDivision is specified as ticksPerQuarterNote
+				if (typeof midi.timeDivision === "number")
+					midi.time.msPerTick = midi.time.msPerQuarterNote / midi.timeDivision;
+				//TODO: implement framespersecond version
+
+				midi.tracks = [];	//reset midi tracks
+				for (var i = 1; i < obj.track.length; i++)
+				{
+					var track = obj.track[i].event;
+					parseType1MusicTrack(track);
+				}
+			}
+
+			/**
+			 * Function that determines the mapped character
+			 * of a note given the note's index on the Piano.
+			 * @param {number} noteNumber A number that represents
+			 *		a note on the Piano.
+			 * @returns {String|@exp;String@call;fromCharCode}
+			 *		The mapped character corresponding to the note.
+			 */
+			function mapNoteToChar(noteNumber)
+			{
+				//representable with traditional keyboard setup
+				if (noteNumber >= 27 && noteNumber < 71)
+				{
+					//index in the octave set
+					var setIndex = (noteNumber - 27) % 12;
+					
+					if (isBlackKey(setIndex) )
+						return mapBlackNoteToTraditionalChar(noteNumber);
+					else	//white keys range from A-Z
+					{
+						var set = (noteNumber - 27) / 12;
+						return String.fromCharCode( CHARCODE["A"] + set * 7 );
+					}
+				}
+				else
+				{
+					unmappedNotes.push(noteNumber);
+					return "*";
+				}
+
+				//TODO: else implement a new keyboard setup for the specific song
+			}
+
+			/**
+			 * Function that determines the character a black note key
+			 * is mapped to.
+			 * @param {number} noteNumber A number that represents
+			 *		a note on the Piano.
+			 * @returns {String} The character the black key is mapped to.
+			 */
+			function mapBlackNoteToTraditionalChar(noteNumber)
+			{
+				//The mapped traditional keyboard starts at note 27 to note 70
+				switch (noteNumber - 27)
+				{
+					/**first octave**/
+					case 1:
+						return "[";
+					case 3:
+						return "]";
+					case 6:
+						return "`";
+					case 8:
+						return ";";
+					case 10:
+						return "1";
+					/**second octave**/
+					case 13:
+						return "2";
+					case 15:
+						return "3";
+					case 18:
+						return "4";
+					case 20:
+						return "5";
+					case 22:
+						return "6";
+					/**third octave**/
+					case 25:
+						return "7";
+					case 27:
+						return "8";
+					case 30:
+						return "9";
+					case 32:
+						return "0";
+					case 34:
+						return "'";
+					/**fourth octave**/
+					case 37:
+						return ",";
+					case 39:
+						return ".";
+					case 42:
+						return "/";
+					default:
+						unmappedNotes.push(noteNumber);	//store for later playing
+						return "*";
+				}
+			}
+
+			/*var utf8 = {};
+
+			utf8.toByteArray = function(str) {
+				var byteArray = [];
+				for (var i = 0; i < str.length; i++)
+					if (str.charCodeAt(i) <= 0x7F)
+						byteArray.push(str.charCodeAt(i));
+					else {
+						var h = encodeURIComponent(str.charAt(i)).substr(1).split('%');
+						for (var j = 0; j < h.length; j++)
+							byteArray.push(parseInt(h[j], 16));
+					}
+				return byteArray;
+			};
+
+			utf8.parse = function(byteArray) {
+				var str = '';
+				for (var i = 0; i < byteArray.length; i++)
+					str +=  byteArray[i] <= 0x7F?
+							byteArray[i] === 0x25 ? "%25" : // %
+							String.fromCharCode(byteArray[i]) :
+							"%" + byteArray[i].toString(16).toUpperCase();
+				return decodeURIComponent(str);
+			};*/
+
+
+			/**
+			 * Callback function used with JSMIDIParser library's IO function.
+			 * It handles the logics of storing and parsing the parsed out
+			 * MIDI events to be used later when converting
+			 * the MIDI file to a music score.
+			 * @param {object} obj A parsed out object containing info
+			 *		about the events in MIDI file.
+			 */
+			function parse(obj)
+			{
+				/**
+				 * If an array, then first element is frames per second MODE (1st byte)
+				 * second element is ticks in each frame (2nd byte).
+				 * else if a number then it represents ticks per beat MODE (2 bytes value)
+				 */
+				midi.timeDivision = obj.timeDivision;
+				midi.trackNumber = obj.tracks;
+
+				switch (obj.formatType)
+				{
+					case 1:
+						handleType1MIDI(obj);
+						convertMIDIToScore();
+						break;
+					default:
+						alert("Sorry! Unsupported midi type.");
+				}
+
+				//console.log("metro = " + midi.time.metro);
+				//console.log("BPM = " + midi.beatsPerMinute);
+
+				/*****update music score display*****/
+				/**fade in title**/
+				d3.select("#scoretitle").transition()
+					.duration(1000)
+					.style("opacity", 0);
+
+				d3.select("#scoretitle").html(midi.title)
+					.transition()
+					.delay(1000).duration(1000)
+					.style("opacity", 1);
+
+				maxNoteCount = midi.score.length;
+
+				/*****fade in score*****/
+				d3.select("#scorecontent").transition()
+					.duration(1000)
+					.style("opacity", 0);
+
+				d3.select("#scorecontent").html(midi.score)
+					.transition()
+					.delay(1000).duration(1000)
+					.style("opacity", 1);
+
+				$("#scorecontent").lettering();
+				//console.log("lettering!");
+
+				/****highlight correct note****/
+				currentNoteCount = 1;
+				d3.select("#scorecontent")
+					.select(".char" + currentNoteCount)
+					.transition().duration(1500)
+					.style("background", "yellow")
+					.style("color", "black");
+
+				//reset counters
+				playedUnmappedNotes = 0;
+				
+				//console.log("unmapped Notes = %obj", unmappedNotes)
+			}
+			JSMIDIParser.IO("filereader", parse);
+        </script>
+
+    </body>
+</html>
